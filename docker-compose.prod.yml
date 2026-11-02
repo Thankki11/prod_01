@@ -1,0 +1,90 @@
+# Môi trường PRODUCTION: 1 VM chạy cả 4 service.
+# Chạy: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# Chỉ Caddy mở cổng ra ngoài (80/443); db, backend, frontend chỉ nói chuyện trong mạng nội bộ.
+name: diemdanh
+
+# Log Docker mặc định không giới hạn, VPS ổ nhỏ có thể bị đầy sau vài tháng -> giữ tối đa 3 x 10 MB mỗi service
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    logging: *logging
+    env_file: .env.prod
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-256M}
+      # Tắt bộ đo hiệu năng nội bộ: tiết kiệm ~200 MB RAM, quan trọng với VPS 1 GB
+      - --performance-schema=OFF
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  backend:
+    logging: *logging
+    build:
+      context: ./backend
+      target: prod
+    restart: unless-stopped
+    env_file: .env.prod
+    environment:
+      MYSQL_HOST: db
+      COOKIE_SECURE: "true"
+      PUBLIC_APP_URL: https://${DOMAIN:?Cần đặt DOMAIN trong .env.prod}
+      # Web và API cùng tên miền nên không cần CORS
+      CORS_ORIGINS: ""
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+    depends_on:
+      db:
+        condition: service_healthy
+    # healthcheck đã khai báo trong backend/Dockerfile (target prod)
+
+  frontend:
+    logging: *logging
+    build:
+      context: ./frontend
+      target: prod
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    # healthcheck đã khai báo trong frontend/Dockerfile (target prod)
+
+  caddy:
+    logging: *logging
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:
+  caddy_data: # chứng chỉ HTTPS, KHÔNG xoá (Let's Encrypt giới hạn số lần cấp)
+  caddy_config:

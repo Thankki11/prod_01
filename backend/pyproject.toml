@@ -1,0 +1,26 @@
+[project]
+name = "diemdanh-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.32,<1",
+    "gunicorn>=23,<24",
+    "sqlalchemy>=2.0.36,<2.1",
+    "alembic>=1.14,<2",
+    # [rsa] kéo theo cryptography: bắt buộc cho kiểu xác thực caching_sha2_password của MySQL 8
+    "pymysql[rsa]>=1.1,<2",
+    "pydantic-settings>=2.6,<3",
+    "pyjwt>=2.9,<3",
+    "pwdlib[argon2]>=0.2,<1",
+    "python-multipart>=0.0.18",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "httpx>=0.28,<1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

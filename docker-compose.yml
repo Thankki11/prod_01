@@ -1,0 +1,67 @@
+# Môi trường DEV: hot reload cho cả backend và frontend.
+# Chạy: docker compose up --build
+name: diemdanh-dev
+
+services:
+  db:
+    image: mysql:8.4
+    env_file: .env
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./backend/scripts/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    env_file: .env
+    environment:
+      MYSQL_HOST: db
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+      VITE_USE_POLLING: "1"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # node_modules của container (Linux) tách riêng, không dùng bản trên Windows
+      - /app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  db_data:

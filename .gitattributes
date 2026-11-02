@@ -1,0 +1,4 @@
+# Luôn dùng LF: script .sh và file cấu hình được mount/chạy trong container Linux
+* text=auto eol=lf
+*.png binary
+*.gz binary

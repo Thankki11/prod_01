@@ -1,0 +1,12 @@
+# Caddy tự xin và gia hạn chứng chỉ HTTPS (Let's Encrypt) cho {$DOMAIN}.
+# HTTPS là bắt buộc: cookie đăng nhập đặt cờ Secure ở production.
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	reverse_proxy frontend:80
+}
